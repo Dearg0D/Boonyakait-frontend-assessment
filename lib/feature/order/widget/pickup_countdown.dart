@@ -1,3 +1,4 @@
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -8,46 +9,73 @@ import '../../../app_config.dart';
 class PickupCountdown extends StatefulWidget {
   final DateTime pickupStart;
 
-  const PickupCountdown({super.key, required this.pickupStart});
+  const PickupCountdown({
+    super.key,
+    required this.pickupStart,
+  });
 
   @override
   State<PickupCountdown> createState() => _PickupCountdownState();
 }
 
 class _PickupCountdownState extends State<PickupCountdown> {
+  Timer? _timer;
+
   @override
   void initState() {
     super.initState();
-    Timer.periodic(const Duration(seconds: 1), (_) {
-      setState(() {});
-    });
+
+    _timer = Timer.periodic(
+      const Duration(seconds: 1),
+          (_) {
+        if (!mounted) return;
+
+        setState(() {});
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final remaining = widget.pickupStart.difference(DateTime.now());
+
     final String text;
+
     if (remaining.isNegative) {
       text = 'Pickup window is open';
     } else {
       final h = remaining.inHours;
       final m = remaining.inMinutes % 60;
       final s = remaining.inSeconds % 60;
+
       text = h > 0
           ? 'Opens in ${h}h ${m}m'
           : 'Opens in ${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
     }
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Icon(Icons.timer_outlined,
-            size: 15, color: AppConfig.primaryGreen),
+        const Icon(
+          Icons.timer_outlined,
+          size: 15,
+          color: AppConfig.primaryGreen,
+        ),
         const SizedBox(width: 4),
-        Text(text,
-            style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppConfig.primaryGreen)),
+        Text(
+          text,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: AppConfig.primaryGreen,
+          ),
+        ),
       ],
     );
   }
