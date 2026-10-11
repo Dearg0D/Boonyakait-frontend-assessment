@@ -55,32 +55,70 @@ class HomeController extends GetxController {
     flashDeals.assignAll(await dealRepo.fetchFlashDeals());
   }
 
+
+  int _generation = 0;
+
   Future<void> refreshDeals() async {
+    // Invalidate requests from the previous feed generation.
+    final generation = ++_generation;
+
     _page = 1;
-    final res = await dealRepo.fetchDeals(page: 1);
-    _totalPages = res.totalPages;
-    deals.assignAll(res.items);
-    refreshController.refreshCompleted();
+    _totalPages = 1;
+    _isFetchingMore = false;
+
+    refreshController.resetNoData();
+
+    try {
+      final res = await dealRepo.fetchDeals(page: 1);
+
+      if (generation != _generation || isClosed) return;
+
+      _page = 1;
+      _totalPages = res.totalPages;
+      deals.assignAll(res.items);
+    } catch (e) {
+      if (generation == _generation && !isClosed) {
+        LogService.error('refresh failed', e);
+      }
+    } finally {
+      if (generation == _generation && !isClosed) {
+        refreshController.refreshCompleted();
+      }
+    }
   }
 
   Future<void> loadMore() async {
-    if (_isFetchingMore) return;
+    if (_isFetchingMore || refreshController.isRefresh) return;
+
     if (!hasMore) {
       refreshController.loadNoData();
       return;
     }
+
+    final generation = _generation;
+    final nextPage = _page + 1;
+
     _isFetchingMore = true;
-    _page++;
+
     try {
-      final res = await dealRepo.fetchDeals(page: _page);
+      final res = await dealRepo.fetchDeals(page: nextPage);
+
+      // Ignore stale responses from an earlier refresh cycle.
+      if (generation != _generation || isClosed) return;
+
       _totalPages = res.totalPages;
+      _page = nextPage;
       deals.addAll(res.items);
     } catch (e) {
-      LogService.error('loadMore failed', e);
-      _page--;
+      if (generation == _generation && !isClosed) {
+        LogService.error('loadMore failed', e);
+      }
+    } finally {
+      if (generation == _generation && !isClosed) {
+        _isFetchingMore = false;
+        refreshController.loadComplete();
+      }
     }
-    _isFetchingMore = false;
-    refreshController.loadComplete();
   }
 
   void scrollToTop() {

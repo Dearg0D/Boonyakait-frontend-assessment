@@ -137,3 +137,61 @@ Used ChatGPT to analyze the GetX worker lifecycle, identify the missing listener
 **Time Spent**
 
 Approximately 35 minutes (including investigation, implementation, and documentation).
+
+### RES-104 — Duplicate Deals in the Home Feed
+
+**Root Cause**
+
+The `HomeController` had a race condition between pagination (`loadMore()`) and pull-to-refresh (`refreshDeals()`).
+
+When the user scrolled to the bottom of the home feed, `loadMore()` started fetching the next page. If the user triggered a refresh before that request completed, `refreshDeals()` reset the page number and loaded the first page again.
+
+However, the previous pagination request was still running and could append its results to the refreshed list using `deals.addAll()`.
+
+This caused duplicate deals, inconsistent pagination, and sometimes more items than the catalog contained.
+
+**Solution**
+
+- Implemented request generation tracking using `_generation` to distinguish between old and current requests.
+- Incremented `_generation` whenever a new refresh started, invalidating responses from previous requests.
+- Added a generation check before updating the deal list to prevent outdated responses from modifying the current feed.
+- Used a local `nextPage` variable instead of incrementing `_page` before the API request completed.
+- Added a guard to prevent pagination from starting while a refresh was in progress.
+- Added an `isClosed` check to prevent state updates after the controller was disposed.
+- Used `finally` to manage loading states and refresh controller completion.
+
+This ensures that only responses belonging to the current feed generation can update the displayed deals.
+
+**Alternative Considered**
+
+I considered removing duplicate deals by filtering items with the same deal ID before adding them to the list.
+
+However, this would only hide the duplicated items without solving the underlying race condition. It could also leave the pagination state inconsistent.
+
+I chose request generation tracking because it prevents outdated API responses from modifying the feed.
+
+**Edge Cases**
+
+- Pull-to-refresh while the next page is loading.
+- Multiple refresh requests occurring close together.
+- Old pagination requests completing after a refresh.
+- API failures during pagination or refresh.
+- Reaching the final page of the catalog.
+- Controller disposal while an API request is still running.
+
+**Testing**
+
+- Scroll to the bottom of the home feed to trigger pagination.
+- Pull to refresh while the next page is still loading.
+- Verify that old pagination responses do not modify the refreshed list.
+- Verify that no duplicate deal cards appear.
+- Verify that pagination continues correctly after refreshing.
+- Repeat the process multiple times to check for race conditions.
+
+**AI Usage**
+
+Used ChatGPT to analyze the asynchronous pagination flow, identify the race condition between `loadMore()` and `refreshDeals()`, and review request generation tracking as a solution.
+
+**Time Spent**
+
+Approximately 45 minutes (including investigation, implementation, and documentation).
