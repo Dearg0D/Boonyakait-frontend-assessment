@@ -268,3 +268,59 @@ AI was also used to assist with interpreting Chrome DevTools performance and mem
 
 Approximately 2 Hours (including investigation, implementation, and documentation).
 
+### RES-106 — Wrong Pickup Times and Incorrect "Pickup Today" Filter
+
+**Root Cause**
+
+The `PickupWindowModel` had two issues related to date and time handling.
+
+1. **Incorrect Timezone Conversion:** The backend sends pickup times as ISO-8601 UTC strings. The original implementation used `DateTime.parse()` without converting the parsed values to local time before displaying them.
+
+   This caused pickup windows to display UTC times instead of local times. For example, a pickup window of 23:00–02:30 UTC was displayed incorrectly instead of 06:00–09:30 in Thailand (UTC+7).
+
+2. **Incorrect Date Comparison:** The `isToday` getter compared only `start.day` with `DateTime.now().day`, without checking the month, year, or timezone.
+
+   This caused some deals to be incorrectly included or excluded from the "Pickup today" filter.
+
+**Solution**
+
+- Updated `PickupWindowModel.fromJson()` to convert UTC timestamps to local time using `.toLocal()`.
+- Updated the `label` getter to display pickup times in the device's local timezone.
+- Fixed the `isToday` getter to compare the year, month, and day using local dates.
+- Adjusted `isOpenNow` to include the exact pickup start time while excluding the end time.
+- Kept time comparisons consistent by using Dart's `DateTime` comparison methods.
+
+These changes ensure that pickup times are displayed correctly and that the "Pickup today" filter uses consistent local dates.
+
+**Alternative Considered**
+
+I considered adding seven hours directly to the UTC timestamps to convert them to Thailand time.
+
+However, hardcoding a UTC+7 offset would not work correctly for users in other timezones and could introduce additional problems if the application's regional requirements changed.
+
+I chose `.toLocal()` because it uses the device's configured timezone and avoids hardcoded offsets.
+
+**Edge Cases**
+
+- Pickup windows crossing midnight.
+- UTC dates differing from local dates.
+- The same day number occurring in different months or years.
+- Pickup times exactly at the start or end of a window.
+- Users operating in different device timezones.
+
+**Testing**
+
+- Verify that 23:00–02:30 UTC displays as 06:00–09:30 when the device timezone is Asia/Bangkok.
+- Verify that "Pickup today" includes deals starting today in local time.
+- Verify that deals from different months or years are excluded.
+- Verify pickup windows crossing midnight.
+- Run automated tests for UTC parsing and date comparison.
+
+**AI Usage**
+
+Used ChatGPT to analyze the UTC-to-local timezone issue, identify the incorrect date comparison in `isToday`, review the use of `DateTime.toLocal()`, and explore automated testing strategies.
+
+**Time Spent**
+
+Approximately 30 minutes (including investigation, implementation, and documentation).
+
