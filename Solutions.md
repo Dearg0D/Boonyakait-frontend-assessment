@@ -324,3 +324,68 @@ Used ChatGPT to analyze the UTC-to-local timezone issue, identify the incorrect 
 
 Approximately 30 minutes (including investigation, implementation, and documentation).
 
+### RES-107 — Deep Link Opens to a Crash
+
+**Root Cause**
+
+The `DealDetailsController` originally expected a `DealModel` to be passed through `Get.arguments` when opening the deal details screen.
+
+This worked when navigating from the Home Feed because the selected deal was passed as an argument.
+
+However, when opening a deal through a deep link such as `rescu://open/deal?id=42&source=push`, the navigation only provided the deal ID through URL parameters, without a `DealModel` object.
+
+The controller attempted to cast `Get.arguments` to `DealModel`, resulting in the error `type 'Null' is not a subtype of type 'DealModel'`.
+
+Additionally, the `DealDetailsScreen` assumed that the deal data was immediately available, which did not support asynchronous loading.
+
+**Solution**
+
+- Changed the deal state from `late final DealModel` to `Rxn<DealModel>` to support asynchronous loading.
+- Added `isLoading` and `errorMessage` states to manage the loading process.
+- Updated the controller to support both navigation methods:
+  - Normal navigation: retrieve the `DealModel` from `Get.arguments`.
+  - Deep link navigation: retrieve the deal ID from `Get.parameters` and fetch the deal using `dealRepo.fetchById(id)`.
+- Updated `DealDetailsScreen` to display a loading indicator while fetching deal information.
+- Used `Obx()` to rebuild the screen when the deal data becomes available.
+- Added `isClosed` checks to prevent asynchronous operations from updating a disposed controller.
+- Preserved the GetX worker cleanup implemented in RES-103.
+
+This allows users to open a fully functional deal details screen from both the Home Feed and deep links.
+
+**Alternative Considered**
+
+I considered checking whether `Get.arguments` was null and displaying a fallback screen.
+
+However, this would only prevent the crash without fulfilling the requirement to display the requested deal.
+
+Instead, I implemented asynchronous deal loading using the deal ID from the deep link.
+
+**Edge Cases**
+
+- Opening a deal from the Home Feed with an existing `DealModel`.
+- Opening a deal directly using a deep link.
+- Handling asynchronous data loading.
+- Invalid or missing deal IDs.
+- API failures during deal loading.
+- Navigating away before the request completes.
+- Preventing GetX workers from remaining active after leaving the screen.
+
+**Testing**
+
+- Open the deal details screen using the simulated deep link.
+- Verify that deal ID 42 displays the correct information.
+- Verify that the deal can be added to the bag successfully.
+- Verify that normal navigation from the Home Feed still works.
+- Verify that no errors occur when navigating away during loading.
+- Test the deep link on Android using ADB.
+
+**AI Usage**
+
+Used ChatGPT to identify the null argument issue, analyze GetX navigation parameters, implement asynchronous deal loading, and update the reactive UI to support loading and error states.
+
+AI was also used to review controller lifecycle handling and maintain compatibility with the worker cleanup implemented in RES-103.
+
+**Time Spent**
+
+Approximately 1 Hours (including investigation, implementation, and documentation).
+

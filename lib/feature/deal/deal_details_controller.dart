@@ -18,7 +18,9 @@ class DealDetailsController extends GetxController {
     required this.analytics,
   });
 
-  late final DealModel deal;
+  final deal = Rxn<DealModel>();
+  final isLoading = true.obs;
+  final errorMessage = RxnString();
 
   final _quantityLeft = RxnInt();
   int? get quantityLeft => _quantityLeft.value;
@@ -29,38 +31,87 @@ class DealDetailsController extends GetxController {
   void onInit() {
     super.onInit();
 
-    deal = Get.arguments as DealModel;
-    _quantityLeft.value = deal.quantityLeft;
-
-    analytics.logEvent('deal_details_view', {
-      'deal_id': deal.id,
-      'source': Get.parameters['source'] ?? 'unknown',
-    });
-
     _cartWorker = ever(
       cartService.itemCount,
           (_) => _recheckAvailability(),
     );
+
+    _loadDeal();
+  }
+
+  Future<void> _loadDeal() async {
+    isLoading.value = true;
+    errorMessage.value = null;
+
+    try {
+      DealModel selectedDeal;
+
+      final arguments = Get.arguments;
+
+      if (arguments is DealModel) {
+        selectedDeal = arguments;
+      } else {
+        final id = int.tryParse(
+          Get.parameters['id'] ?? '',
+        );
+
+        if (id == null) {
+          throw Exception('Invalid deal ID');
+        }
+
+        selectedDeal = await dealRepo.fetchById(id);
+      }
+
+      if (isClosed) return;
+
+      deal.value = selectedDeal;
+      _quantityLeft.value = selectedDeal.quantityLeft;
+
+      analytics.logEvent('deal_details_view', {
+        'deal_id': selectedDeal.id,
+        'source': Get.parameters['source'] ?? 'unknown',
+      });
+    } catch (e) {
+      if (isClosed) return;
+
+      LogService.error('load deal failed', e);
+      errorMessage.value = 'Unable to load deal';
+    } finally {
+      if (!isClosed) {
+        isLoading.value = false;
+      }
+    }
   }
 
   Future<void> _recheckAvailability() async {
-    LogService.log(
-      're-checking availability for deal ${deal.id}',
-    );
+    final currentDeal = deal.value;
+    if (currentDeal == null || isClosed) return;
 
-    final fresh = await dealRepo.fetchById(deal.id);
+    try {
+      final fresh = await dealRepo.fetchById(currentDeal.id);
 
-    if (isClosed) return;
+      if (isClosed || deal.value?.id != currentDeal.id) {
+        return;
+      }
 
-    _quantityLeft.value = fresh.quantityLeft;
+      _quantityLeft.value = fresh.quantityLeft;
+    } catch (e) {
+      if (!isClosed) {
+        LogService.error('recheck availability failed', e);
+      }
+    }
   }
 
   void addToCart() {
-    cartService.add(deal);
+    final currentDeal = deal.value;
+
+    if (currentDeal == null || isClosed) return;
+
+    cartService.add(currentDeal);
 
     Get.snackbar(
       'Added to bag',
-      '${deal.name} — pick up ${deal.pickupWindow.label}',
+      '${currentDeal.name} — pick up ${currentDeal.pickupWindow.label}',
       snackPosition: SnackPosition.BOTTOM,
       duration: const Duration(seconds: 2),
     );
