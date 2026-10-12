@@ -37,8 +37,22 @@ class HomeController extends GetxController {
     _initialLoad();
   }
 
+  final showAppBarShadow = false.obs;
+  final showScrollToTop = false.obs;
+
   void _onScroll() {
-    scrollOffset.value = scrollController.offset;
+    final offset = scrollController.offset;
+
+    final shouldShowShadow = offset > 4;
+    final shouldShowTopButton = offset > 800;
+
+    if (showAppBarShadow.value != shouldShowShadow) {
+      showAppBarShadow.value = shouldShowShadow;
+    }
+
+    if (showScrollToTop.value != shouldShowTopButton) {
+      showScrollToTop.value = shouldShowTopButton;
+    }
   }
 
   Future<void> _initialLoad() async {

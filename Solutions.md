@@ -195,3 +195,76 @@ Used ChatGPT to analyze the asynchronous pagination flow, identify the race cond
 **Time Spent**
 
 Approximately 45 minutes (including investigation, implementation, and documentation).
+
+### RES-105 — Home Feed Performance and Memory Optimization
+
+**Root Cause**
+
+The Home Feed had several performance issues affecting scrolling smoothness and memory usage.
+
+1. **Excessive Widget Rebuilds:** The entire `Scaffold` was wrapped in an `Obx()` that observed `scrollOffset`, causing unnecessary widget rebuilds during scrolling.
+
+2. **Eager Widget Creation:** The Home Feed used `ListView` with predefined children, creating all deal cards upfront instead of building them lazily.
+
+3. **Image Memory Usage:** `CachedNetworkImage` did not specify image decode dimensions, potentially retaining images at unnecessarily large resolutions.
+
+**Solution**
+
+- Refactored the Home Screen to separate reactive components and reduce unnecessary widget rebuilds.
+- Replaced continuous reactive scroll offset updates with threshold-based state changes for AppBar elevation and the Scroll-to-Top button.
+- Replaced `ListView` with `ListView.builder()` to lazily create deal cards.
+- Added `memCacheWidth` and `memCacheHeight` to optimize decoded image dimensions based on available layout constraints and device pixel ratio.
+
+These changes reduce unnecessary widget construction, limit reactive updates, and improve image memory management.
+
+**Alternative Considered**
+
+I considered throttling scroll events and manually clearing the image cache.
+
+However, throttling alone would not address the excessive widget rebuild scope, while manually clearing the image cache could cause unnecessary image reloading.
+
+I chose targeted reactive state updates, lazy list rendering, and image decode optimization to address the underlying performance issues.
+
+**Edge Cases**
+
+- Scrolling through large paginated lists.
+- Pull-to-refresh during pagination.
+- Switching the Pickup Today filter.
+- Rendering images with different dimensions.
+- Maintaining Scroll-to-Top functionality.
+- Preserving navigation and existing Home Feed behavior.
+
+**Performance Evidence — Flutter Web**
+
+Performance and memory were evaluated using Chrome DevTools.
+
+| Metric                | Before Fix | Measured After Fix |
+|-----------------------|-----------:|-------------------:|
+| Scripting Time        | 4,547 ms   | 4,207 ms           |
+| Recording Duration    | 5.21 s     | 5.11 s             |
+| Rendering Time        | 50 ms      | 55 ms              |
+| Initial Heap Snapshot | 187 MB     | 186 MB             |
+| Heap After Scrolling  | 196 MB     | 194 MB             |
+
+The selected performance recordings showed approximately a 7.5% reduction in scripting time.
+
+In a separate memory measurement, the heap size after scrolling was 194 MB, compared with 196 MB in the initial baseline.
+
+These results provide preliminary evidence of improvement, but the scripting recordings included compilation and loading activity, and the memory measurements were collected in separate sessions. Further controlled measurements are needed to confirm the performance improvement.
+
+**Testing Limitations**
+
+Testing was performed using Flutter Web because the Android Emulator was unstable on the development machine.
+
+Android-specific frame performance and image cache behavior have not yet been validated on a physical device.
+
+**AI Usage**
+
+Used ChatGPT to analyze GetX reactive widget rebuilds, identify performance issues in the Home Feed, evaluate lazy list rendering, and review image decoding optimizations.
+
+AI was also used to assist with interpreting Chrome DevTools performance and memory measurements.
+
+**Time Spent**
+
+Approximately 2 Hours (including investigation, implementation, and documentation).
+
