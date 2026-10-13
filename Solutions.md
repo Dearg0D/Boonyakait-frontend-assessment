@@ -389,3 +389,114 @@ AI was also used to review controller lifecycle handling and maintain compatibil
 
 Approximately 1 Hours (including investigation, implementation, and documentation).
 
+## Part B — Features
+
+### F-1 — Live Flash-Sale Countdowns
+
+**Implementation**
+
+Implemented a real-time flash-sale countdown system using the `flashSaleEndsAt` field from `DealModel`.
+
+The countdown displays the remaining time in `mm:ss` format, or `hh:mm:ss` when one hour or more remains.
+
+The countdown is integrated into:
+- Flash Sale Rail
+- Home Feed Deal Cards
+- Deal Details Screen
+- Cart Screen
+
+**Architecture and Solution**
+
+1. **Shared Clock Service**
+
+   Created `FlashSaleClockService` using GetX to manage a single shared `Timer.periodic()`.
+
+   The service updates the current time every second, allowing multiple countdown widgets to observe the same clock without creating individual timers.
+
+2. **Reusable Countdown Widget**
+
+   Created `FlashSaleCountdown` to calculate and display the remaining time.
+
+   The widget uses `Obx()` to update the countdown text every second and automatically displays `Expired` when the remaining time reaches zero.
+
+   Added support for custom text colors and a `FLASH SALE` label to maintain consistent styling across different screens.
+
+3. **Expiration Handling**
+
+   Updated `CartService.add()` to reject expired flash-sale deals.
+
+   Updated the Deal Details Screen to disable the Add to bag button when the countdown expires.
+
+   Expired deals display an `Expired` state instead of the active countdown.
+
+4. **Automatic Cart Cleanup**
+
+   Added expiration monitoring to `CartService` using the shared clock.
+
+   When a flash-sale deal expires, it is removed from the cart, the item count and total are recalculated, and a Snackbar notifies the user.
+
+5. **Performance Optimization**
+
+   Used a shared clock instead of creating separate timers for each countdown.
+
+   Scoped reactive countdown updates to small widgets using `Obx()` to avoid rebuilding the entire Home Feed every second.
+
+   This approach reduces unnecessary timer management and limits reactive UI updates.
+
+**Alternative Considered**
+
+I considered creating a separate `Timer.periodic()` for each deal card.
+
+However, this would introduce unnecessary timers, increase lifecycle management complexity, and potentially affect performance when displaying many flash-sale deals.
+
+I chose a shared clock service because it centralizes time updates and allows each countdown widget to calculate its remaining duration independently.
+
+**Edge Cases**
+
+- Flash-sale deals that have already expired.
+- Countdown reaching exactly zero.
+- Multiple deals expiring at the same time.
+- Deals expiring while the user is viewing the details screen.
+- Expired deals already present in the cart.
+- Preventing expired deals from being added again.
+- Navigating between screens while countdowns remain active.
+- Handling deals with no flash-sale expiration.
+
+**Testing**
+
+**Widget Rebuild Verification**
+
+Used temporary `debugPrint()` instrumentation in `HomeScreen`, `DealCard`, and `FlashSaleCountdown` to inspect widget rebuild behavior.
+
+During testing on Flutter Web, countdown widgets continued rebuilding to update their displayed time, while `HomeScreen` and `DealCard` did not repeatedly invoke their build methods every second.
+
+This provides evidence that periodic countdown updates are scoped to smaller reactive widgets rather than rebuilding the entire Home Feed under the tested conditions.
+
+**Functional Testing Checklist**
+
+- Verify countdown formatting (`mm:ss` and `hh:mm:ss`).
+- Verify countdowns update every second across the required screens.
+- Verify expired deals display the `Expired` state.
+- Verify Add to bag is disabled after expiration.
+- Verify expired items are automatically removed from the cart.
+- Verify cart totals and quantities update correctly.
+- Verify the expiration Snackbar appears.
+- Verify HomeScreen and DealCard build methods are not repeatedly called by countdown updates during the observed Flutter Web test.
+
+**Testing Limitations**
+
+Testing was performed using Flutter Web because the Android Emulator was unstable on the development machine.
+
+Widget rebuild behavior was inspected through Console logging. However, Android-specific frame performance with 100+ visible countdowns has not yet been validated using Flutter DevTools.
+
+**AI Usage**
+
+Used ChatGPT to design the shared clock architecture, implement the reusable countdown widget, and manage flash-sale expiration behavior.
+
+AI was also used to investigate GetX dependency registration, optimize reactive widget rebuilds, and review the integration with `CartService`.
+
+Temporary debug logging was used to verify the suggested rebuild approach.
+
+**Time Spent**
+
+Approximately 2 Hours (including investigation, implementation, and documentation).

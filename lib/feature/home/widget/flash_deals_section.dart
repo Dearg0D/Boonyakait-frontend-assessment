@@ -6,6 +6,8 @@ import '../../../model/deal_model.dart';
 import '../../../routes/routes.dart';
 import '../../shared_widget/the_network_image.dart';
 
+import '../../shared_widget/flash_sale_countdown.dart';
+
 /// Horizontal flash-sale rail.
 ///
 /// NOTE: the countdown is currently a static "Ends soon" label — turning it
@@ -90,11 +92,11 @@ class FlashDealsSection extends StatelessWidget {
                                       color: Colors.red.shade50,
                                       borderRadius: BorderRadius.circular(4),
                                     ),
-                                    child: Text('Ends soon',
-                                        style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w600,
-                                            color: Colors.red.shade700)),
+                                    child: deal.flashSaleEndsAt != null
+                                        ? FlashSaleCountdown(
+                                      endsAt: deal.flashSaleEndsAt!,
+                                    )
+                                        : const SizedBox.shrink(),
                                   ),
                                 ],
                               ),

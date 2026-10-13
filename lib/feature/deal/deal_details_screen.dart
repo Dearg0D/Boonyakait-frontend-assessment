@@ -5,6 +5,8 @@ import '../../app_config.dart';
 import '../../model/deal_model.dart';
 import '../shared_widget/the_network_image.dart';
 import 'deal_details_controller.dart';
+import '../../service/flash_sale_clock_service.dart';
+import '../shared_widget/flash_sale_countdown.dart';
 
 class DealDetailsScreen extends GetView<DealDetailsController> {
   const DealDetailsScreen({super.key});
@@ -160,6 +162,29 @@ class DealDetailsScreen extends GetView<DealDetailsController> {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  if (deal.flashSaleEndsAt != null) ...[
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.timer_outlined,
+                          color: Colors.red,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Flash Sale: ',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        FlashSaleCountdown(
+                          endsAt: deal.flashSaleEndsAt!,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   const Text(
                     'What you get',
                     style: TextStyle(
@@ -202,10 +227,40 @@ class DealDetailsScreen extends GetView<DealDetailsController> {
         color: Colors.white,
         child: SizedBox(
           width: double.infinity,
-          child: FilledButton.icon(
-            onPressed: controller.addToCart,
-            icon: const Icon(Icons.add_shopping_cart),
-            label: const Text('Add to bag'),
+          child: Builder(
+            builder: (context) {
+              final endsAt = deal.flashSaleEndsAt;
+
+              // Normal deals do not expire.
+              if (endsAt == null) {
+                return FilledButton.icon(
+                  onPressed: controller.addToCart,
+                  icon: const Icon(Icons.add_shopping_cart),
+                  label: const Text('Add to bag'),
+                );
+              }
+
+              final clock = Get.find<FlashSaleClockService>();
+
+              return Obx(() {
+                final now = clock.now.value;
+                final isExpired = !now.isBefore(endsAt);
+
+                return FilledButton.icon(
+                  onPressed: isExpired
+                      ? null
+                      : controller.addToCart,
+                  icon: Icon(
+                    isExpired
+                        ? Icons.timer_off_outlined
+                        : Icons.add_shopping_cart,
+                  ),
+                  label: Text(
+                    isExpired ? 'Expired' : 'Add to bag',
+                  ),
+                );
+              });
+            },
           ),
         ),
       ),

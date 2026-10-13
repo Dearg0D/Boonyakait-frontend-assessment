@@ -6,6 +6,9 @@ import '../../model/deal_model.dart';
 import '../../routes/routes.dart';
 import 'the_network_image.dart';
 
+import '../../service/flash_sale_clock_service.dart';
+import 'flash_sale_countdown.dart';
+
 /// Deal card used in the home feed and search results.
 class DealCard extends StatelessWidget {
   final DealModel deal;
@@ -31,24 +34,33 @@ class DealCard extends StatelessWidget {
             Stack(
               children: [
                 TheNetworkImage(url: deal.imageUrl, height: 160, width: double.infinity),
-                if (deal.isFlashSale)
+                if (deal.flashSaleEndsAt != null)
                   Positioned(
                     top: 8,
                     left: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade600,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Text(
-                        'FLASH SALE',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold),
-                      ),
-                    ),
+                    child: Obx(() {
+                      final clock = Get.find<FlashSaleClockService>();
+                      final expired =
+                      !clock.now.value.isBefore(deal.flashSaleEndsAt!);
+
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: expired
+                              ? Colors.grey.shade700
+                              : Colors.red.shade600,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: FlashSaleCountdown(
+                          endsAt: deal.flashSaleEndsAt!,
+                          showFlashSaleLabel: true,
+                          textColor: Colors.white,
+                        ),
+                      );
+                    }),
                   ),
                 Positioned(
                   top: 8,

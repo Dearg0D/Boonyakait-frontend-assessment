@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import '../../app_config.dart';
 import '../shared_widget/the_network_image.dart';
 import 'cart_controller.dart';
+import '../shared_widget/flash_sale_countdown.dart';
 
 class CartScreen extends GetView<CartController> {
   const CartScreen({super.key});
@@ -56,6 +57,23 @@ class CartScreen extends GetView<CartController> {
                                   fontSize: 13,
                                   color: AppConfig.primaryGreen,
                                   fontWeight: FontWeight.w600)),
+                          if (item.deal.flashSaleEndsAt != null) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.timer_outlined,
+                                  size: 14,
+                                  color: Colors.red,
+                                ),
+                                const SizedBox(width: 4),
+                                FlashSaleCountdown(
+                                  endsAt: item.deal.flashSaleEndsAt!,
+                                ),
+                              ],
+                            ),
+                          ],
                         ],
                       ),
                     ),
