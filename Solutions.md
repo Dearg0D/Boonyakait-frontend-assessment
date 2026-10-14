@@ -753,3 +753,67 @@ The implementation was reviewed and functionally tested using the simulated back
 **Time Spent**
 
 Approximately 3 hours (including investigation, implementation, testing, and documentation).
+
+## Part C — Written Deliverables
+
+### 1. AI Usage Log
+
+**AI Tools Used**
+
+I used ChatGPT throughout the assessment as a development assistant to help analyze bugs, review Flutter and GetX concepts, explore implementation approaches, and improve documentation.
+
+AI was primarily used for:
+
+- **Bug Investigation:** Analyzing potential root causes of asynchronous race conditions, widget lifecycle issues, pagination problems, timezone conversion, and deep-link navigation.
+- **Code Implementation:** Reviewing solutions involving request versioning, GetX Worker disposal, reactive state management, and asynchronous loading.
+- **Performance Optimization:** Investigating unnecessary widget rebuilds, lazy list rendering, and image cache optimization.
+- **Feature Development:** Exploring shared countdown timers, impression tracking, analytics batching, optimistic UI, and stock reservation management.
+- **Documentation:** Organizing technical explanations and reviewing the clarity of `solutions.md`.
+
+I reviewed the AI-generated suggestions against the existing codebase and used debugging, console logs, and functional testing to evaluate the implementations.
+
+### 2. Incorrect or Misleading AI Suggestions
+
+**Example 1 — RES-103: Navigation Error**
+
+During RES-103, I encountered a `LateInitializationError` caused by using `Get.toNamed()` instead of retrieving `Get.arguments`.
+
+I identified the issue through debugging and corrected the code to properly initialize the `DealModel`.
+
+**What I learned:** Always verify AI-assisted code changes and understand how navigation works.
+
+**Example 2 — RES-105: Memory Optimization**
+
+AI suggested optimizing image caching to reduce memory usage, but the initial Chrome DevTools results showed no clear improvement.
+
+I reviewed the memory snapshots and further optimized widget rebuilds and scroll state management.
+
+**What I learned:** AI suggestions should be tested and verified with actual performance measurements.
+
+### 3. Design Questions
+
+**Q1 — What is the difference between a GetxController's lifecycle and a widget State's lifecycle?**
+
+A `GetxController` is managed by GetX using `onInit()` and `onClose()`, while a StatefulWidget uses `initState()` and `dispose()`. Both require proper resource cleanup. For example, RES-102 crashed because a timer was not cancelled when the widget was disposed.
+
+**Q2 — When does wrapping a large subtree in a single Obx hurt performance?**
+
+A large `Obx()` can cause unnecessary widget rebuilds when reactive values change frequently. In RES-105, the entire Home Screen rebuilt during scrolling. I fixed this by separating reactive widgets and updating only the UI components that needed changes.
+
+**Q3 — How would you write an automated test to catch RES-106?**
+
+I would write unit tests to verify UTC-to-local time conversion and the `isToday` filter, including midnight and date boundary cases. To make testing easier, I would separate date logic from the UI and allow a fixed current time and timezone during tests.
+
+### 4. Time Spent
+
+Development time was tracked approximately for each ticket and feature in Parts A and B.
+
+**Total Time Spent**
+
+Approximately 12 hours and 5 minutes (including investigation, implementation, testing, and documentation).
+
+### 5. What I Would Do With One More Day
+
+If I had one more day, I would focus on improving automated tests, fixing remaining edge cases, and testing application performance on a physical Android device.
+
+This would help improve application stability and prevent future bugs.
