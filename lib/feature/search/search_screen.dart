@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 
 import '../shared_widget/deal_card.dart';
 import 'search_deals_controller.dart';
+import '../shared_widget/deal_impression_tracker.dart';
 
 class SearchScreen extends GetView<SearchDealsController> {
   const SearchScreen({super.key});
@@ -36,12 +37,23 @@ class SearchScreen extends GetView<SearchDealsController> {
                 style: TextStyle(color: Colors.grey.shade600)),
           );
         }
+
         return ListView.builder(
           itemCount: controller.results.length,
-          itemBuilder: (context, index) => DealCard(
-            deal: controller.results[index],
-            source: 'search',
-          ),
+          itemBuilder: (context, index) {
+            final deal = controller.results[index];
+
+            return DealImpressionTracker(
+              key: ValueKey('search-${deal.id}'),
+              dealId: deal.id,
+              source: 'search',
+              position: index,
+              child: DealCard(
+                deal: deal,
+                source: 'search',
+              ),
+            );
+          },
         );
       }),
     );

@@ -9,6 +9,7 @@ import '../shared_widget/deal_card.dart';
 import '../shared_widget/shimmer_deal_card.dart';
 import 'home_controller.dart';
 import 'widget/flash_deals_section.dart';
+import '../shared_widget/deal_impression_tracker.dart';
 
 class HomeScreen extends GetView<HomeController> {
   const HomeScreen({super.key});
@@ -98,9 +99,16 @@ class HomeScreen extends GetView<HomeController> {
               final deal = visibleDeals[dealIndex];
 
               // Lazy-build each deal card
-              return DealCard(
-                key: ValueKey(deal.id),
-                deal: deal,
+
+              return DealImpressionTracker(
+                key: ValueKey('home-${deal.id}'),
+                dealId: deal.id,
+                source: 'home_feed',
+                position: dealIndex,
+                child: DealCard(
+                  deal: deal,
+                  source: 'home_feed',
+                ),
               );
             },
           ),

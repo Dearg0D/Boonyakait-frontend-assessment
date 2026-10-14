@@ -7,6 +7,7 @@ import '../../../routes/routes.dart';
 import '../../shared_widget/the_network_image.dart';
 
 import '../../shared_widget/flash_sale_countdown.dart';
+import '../../shared_widget/deal_impression_tracker.dart';
 
 /// Horizontal flash-sale rail.
 ///
@@ -41,9 +42,15 @@ class FlashDealsSection extends StatelessWidget {
             itemCount: deals.length,
             itemBuilder: (context, index) {
               final deal = deals[index];
-              return SizedBox(
-                width: 200,
-                child: Card(
+
+              return DealImpressionTracker(
+                  key: ValueKey('flash-${deal.id}'),
+              dealId: deal.id,
+              source: 'flash_rail',
+              position: index,
+              child: SizedBox(
+              width: 200,
+              child: Card(
                   color: Colors.white,
                   elevation: 0.5,
                   clipBehavior: Clip.antiAlias,
@@ -107,6 +114,7 @@ class FlashDealsSection extends StatelessWidget {
                     ),
                   ),
                 ),
+               ),
               );
             },
           ),

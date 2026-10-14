@@ -500,3 +500,113 @@ Temporary debug logging was used to verify the suggested rebuild approach.
 **Time Spent**
 
 Approximately 2 Hours (including investigation, implementation, and documentation).
+
+### F-2 — Deal Impression Tracking
+
+**Implementation**
+
+Implemented a deal impression tracking system using `VisibilityDetector` and `AnalyticsService`.
+
+The system records a `deal_impression` event when a deal card is at least 50% visible on the screen for 1 continuous second.
+
+Impression tracking is integrated into:
+- Home Feed (`home_feed`)
+- Flash Sale Rail (`flash_rail`)
+- Search Results (`search`)
+
+Each event includes the following properties:
+- `deal_id`: Unique ID of the deal.
+- `source`: The screen or section where the impression occurred.
+- `position`: The deal's index within its list.
+
+**Architecture and Solution**
+
+1. **Reusable Impression Tracker**
+
+   Created `DealImpressionTracker` as a reusable StatefulWidget using the existing `visibility_detector` package.
+
+   When a deal card becomes at least 50% visible, a 1-second timer starts. If visibility drops below 50% before the timer completes, the timer is cancelled.
+
+   The widget also handles timer cleanup in `dispose()` and resets its tracking state when the associated deal changes.
+
+2. **Session-Level Deduplication**
+
+   Added a `Set<int>` named `_trackedDealIds` in `AnalyticsService` to store deal IDs already recorded during the current app session.
+
+   Each deal can generate a `deal_impression` event only once per session, even when it appears in multiple screens.
+
+3. **Analytics Batching**
+
+   Implemented an in-memory event queue using `_pendingEvents`.
+
+   Instead of sending events individually, the system calls `FakeApiService.sendAnalyticsBatch()` when either:
+   - 10 impression events have accumulated.
+   - 15 seconds have passed since the first pending event.
+
+   The first condition reached triggers the batch delivery.
+
+4. **Batch Delivery and Error Handling**
+
+   Added `_isSending` to prevent concurrent batch requests.
+
+   Pending events are converted to JSON using `AnalyticsEvent.toJson()` before being sent to the simulated backend.
+
+   If a batch request fails, the events are restored to the pending queue for a later retry.
+
+5. **Performance Considerations**
+
+   Visibility tracking is handled within individual deal card wrappers rather than the entire list.
+
+   Timers are cancelled when no longer needed, and events are batched to reduce unnecessary backend requests.
+
+   The existing `AnalyticsService.logEvent()` behavior was preserved for other events such as `screen_view` and `deal_details_view`.
+
+**Alternative Considered**
+
+I considered recording impressions immediately when deal cards were built or when they first appeared on screen.
+
+However, a widget being built does not guarantee that the user actually viewed it. This approach could also record impressions for cards that users scroll past quickly.
+
+I chose visibility-based tracking with a continuous 1-second threshold because it more accurately represents meaningful user exposure.
+
+I also considered sending each event immediately, but batching was selected to reduce the number of requests and meet the API delivery requirements.
+
+**Edge Cases**
+
+- A deal card is visible for less than 1 second.
+- Visibility falls below 50% before the timer completes.
+- A card becomes visible again after being scrolled away.
+- The same deal appears in multiple screens.
+- Multiple impressions are detected close together.
+- The widget is disposed while its visibility timer is active.
+- A batch request fails or new events arrive while a batch is being sent.
+- The app closes before pending events are delivered.
+
+**Testing**
+
+- Verified impression events are recorded after meeting the visibility threshold.
+- Verified cards scrolled past too quickly do not generate impressions.
+- Verified each deal is recorded only once per app session.
+- Verified impression events include `deal_id`, `source`, and `position`.
+- Verified tracking works across Home Feed, Flash Rail, and Search Results.
+- Verified batch delivery when 10 events accumulate.
+- Verified batch delivery after 15 seconds when fewer than 10 events are pending.
+- Verified analytics events using the Analytics Debug screen and console logs.
+
+**Testing Limitations**
+
+Functional testing was performed using Flutter Web because the Android Emulator was unstable on the development machine.
+
+Android-specific scrolling performance has not yet been profiled. Further testing on a physical Android device is recommended to verify that visibility tracking does not introduce frame drops.
+
+The event queue is stored in memory, so pending events may be lost if the application terminates before batch delivery.
+
+**AI Usage**
+
+Used ChatGPT to analyze the existing `AnalyticsService`, design session-level impression deduplication, implement reusable visibility tracking, and develop the event batching mechanism.
+
+AI was also used to review timer lifecycle management, batch delivery conditions, error handling, and integration with the Home Feed, Flash Rail, and Search Results.
+
+**Time Spent**
+
+Approximately 1 Hours 30 minutes (including investigation, implementation, and documentation).
