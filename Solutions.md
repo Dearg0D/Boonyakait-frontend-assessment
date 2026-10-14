@@ -610,3 +610,146 @@ AI was also used to review timer lifecycle management, batch delivery conditions
 **Time Spent**
 
 Approximately 1 Hours 30 minutes (including investigation, implementation, and documentation).
+
+### F-3 — Stock Reservations with Optimistic UI
+
+**Implementation**
+
+Implemented a stock reservation system that connects the shopping cart with the simulated backend using `OrderRepo.reserve()` and `OrderRepo.releaseReservation()`.
+
+Each reservation holds stock for 5 minutes. The system supports optimistic cart updates, reservation management, expiration handling, and checkout validation.
+
+**Architecture and Solution**
+
+1. **Optimistic UI Updates**
+
+   Updated `CartService.add()` to immediately add items to the cart before receiving the API response.
+
+   When the reservation succeeds, the returned `ReservationModel` is stored in the corresponding `CartItemModel`.
+
+   If the reservation fails with HTTP 409, the optimistic update is rolled back to the previous quantity, and a user-friendly Snackbar is displayed.
+
+2. **Reservation Quantity Management**
+
+   Implemented reservation updates when users increase or decrease item quantities.
+
+   When the quantity changes, the application requests a new reservation for the updated quantity.
+
+   After the new reservation succeeds, the previous reservation is released to prevent unnecessary stock holds.
+
+   If the new reservation fails, the cart quantity and reservation are restored to their previous valid state.
+
+3. **Reservation Release**
+
+   Updated the cart removal logic to call `releaseReservation()` when an item is removed.
+
+   When the quantity reaches zero, the item is removed from the cart and its reservation is released.
+
+   This prevents unused reservations from remaining active unnecessarily.
+
+4. **Reservation Countdown**
+
+   Created a reusable `ReservationCountdown` widget to display the remaining reservation time in `mm:ss` format.
+
+   The countdown uses the existing `FlashSaleClockService` to share a single timer rather than creating additional timers for each cart item.
+
+   The cart displays a `Reserving...` state while waiting for the backend response and a live reservation countdown after successful reservation.
+
+5. **Expiration Handling**
+
+   Implemented automatic expiration checking for cart items.
+
+   When a reservation expires, the item is removed from the cart, the item count and total are recalculated, and the user receives a Snackbar notification.
+
+   Flash-sale expiration is also checked to maintain compatibility with F-1.
+
+6. **Checkout Validation**
+
+   Added validation to prevent checkout while reservations are pending, missing, or expired.
+
+   The existing `OrderRepo.checkout()` passes each item's `reservationId` to the simulated backend.
+
+   After successful checkout, the cart is cleared without unnecessarily releasing reservations already consumed by the order.
+
+   Added handling for HTTP 410 responses to inform users when a reservation has expired.
+
+7. **Concurrent Request Handling**
+
+   Added reservation-in-progress tracking to prevent overlapping reservation requests for the same deal.
+
+   Quantity controls and checkout availability are restricted during relevant pending operations.
+
+   The implementation also checks whether cart items still exist when asynchronous reservation requests complete.
+
+**Product Decision — Reservation Expiration**
+
+I chose to automatically remove expired reservations from the cart rather than renew them without user confirmation.
+
+This avoids misleading users into believing stock is still reserved after the backend hold has expired.
+
+If a reservation expires during checkout, the application informs the user and requires them to add the items again.
+
+This behavior prioritizes stock consistency and makes reservation expiration clear to the user.
+
+**Alternative Considered**
+
+I considered automatically renewing reservations before expiration.
+
+However, automatic renewal could create unexpected stock holds and does not guarantee that the backend will successfully extend the reservation.
+
+I also considered releasing the existing reservation before requesting a new quantity.
+
+However, this could cause users to lose their existing valid reservation if the new request fails.
+
+Instead, I chose to reserve the updated quantity first and release the previous reservation only after the new reservation succeeds.
+
+**Edge Cases**
+
+- Reservation failure with HTTP 409.
+- Insufficient stock when increasing quantity.
+- Reducing item quantity while maintaining a valid reservation.
+- Removing the final item from the cart.
+- Multiple reservation requests for the same deal.
+- Reservation expiration while the user is viewing the cart.
+- Flash-sale expiration while a reservation is active.
+- Reservation expiration during checkout.
+- HTTP 410 responses from the backend.
+- Navigating between screens while reservation requests are running.
+- Releasing reservations when items are removed.
+
+**Testing**
+
+- Verified optimistic cart updates when adding items.
+- Verified successful reservations and reservation ID assignment.
+- Verified HTTP 409 handling and quantity rollback.
+- Verified reservation updates when increasing quantities.
+- Verified reservation updates when decreasing quantities.
+- Verified previous reservations are released after successful updates.
+- Verified reservations are released when items are removed.
+- Verified the 5-minute reservation countdown in the cart.
+- Verified expired reservations are removed from the cart.
+- Verified cart totals and item counts update after expiration.
+- Verified successful checkout using reservation IDs.
+- Verified HTTP 410 expiration handling during checkout.
+
+**Testing Limitations**
+
+Functional testing was performed using Flutter Web because the Android Emulator was unstable on the development machine.
+
+The simulated backend was used to verify reservation requests, release operations, HTTP 409 responses, and checkout behavior.
+
+Additional automated testing would be beneficial for concurrent cart modifications, asynchronous request ordering, and reservation release failures.
+
+The implementation does not currently persist failed release requests for later retries. In these cases, server-side reservation expiration provides a final cleanup mechanism.
+
+**AI Usage**
+
+Used ChatGPT to analyze the existing reservation API contract, design optimistic cart updates, and implement reservation lifecycle management.
+
+AI assistance was also used to review quantity adjustments, rollback behavior, reservation countdowns, HTTP 409 and 410 handling, and integration with the existing Flash Sale functionality.
+
+The implementation was reviewed and functionally tested using the simulated backend and console logs.
+
+**Time Spent**
+
+Approximately 3 hours (including investigation, implementation, testing, and documentation).

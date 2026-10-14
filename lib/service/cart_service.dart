@@ -1,7 +1,11 @@
+
+import 'dart:async';
+
 import 'package:get/get.dart';
 
 import '../model/cart_item_model.dart';
 import '../model/deal_model.dart';
+import '../repository/order_repo.dart';
 import '../util/log_service.dart';
 import 'flash_sale_clock_service.dart';
 
@@ -13,7 +17,42 @@ class CartService extends GetxService {
   final items = <CartItemModel>[].obs;
   final itemCount = 0.obs;
 
+  final Set<int> _reservingDealIds = {};
+  final isCheckingOut = false.obs;
+
   Worker? _expiryWorker;
+
+  OrderRepo get _repo => Get.find<OrderRepo>();
+
+  bool isReserving(int dealId) =>
+      _reservingDealIds.contains(dealId);
+
+  bool isDealExpired(DealModel deal) {
+    final endsAt = deal.flashSaleEndsAt;
+    return endsAt != null &&
+        !DateTime.now().isBefore(endsAt);
+  }
+
+  bool isReservationExpired(CartItemModel item) {
+    final reservation = item.reservation;
+    return reservation != null &&
+        !DateTime.now().isBefore(reservation.expiresAt);
+  }
+
+  bool get canCheckout {
+    if (isCheckingOut.value ||
+        items.isEmpty ||
+        _reservingDealIds.isNotEmpty) {
+      return false;
+    }
+
+    return items.every(
+          (item) =>
+      item.reservation != null &&
+          !isReservationExpired(item) &&
+          !isDealExpired(item.deal),
+    );
+  }
 
   @override
   void onInit() {
@@ -23,22 +62,30 @@ class CartService extends GetxService {
 
     _expiryWorker = ever<DateTime>(
       clock.now,
-          (_) => _removeExpiredDeals(),
+          (_) => removeExpiredItems(),
     );
 
-    _removeExpiredDeals();
+    removeExpiredItems();
   }
 
-  bool isDealExpired(DealModel deal) {
-    final endsAt = deal.flashSaleEndsAt;
-
-    if (endsAt == null) return false;
-
-    return !DateTime.now().isBefore(endsAt);
+  Future<void> _release(String reservationId) async {
+    try {
+      await _repo.releaseReservation(reservationId);
+    } catch (e) {
+      LogService.error('release reservation failed', e);
+    }
   }
 
-  void add(DealModel deal) {
-    // Do not allow expired flash-sale deals.
+  void _recount() {
+    itemCount.value = items.fold(
+      0,
+          (sum, item) => sum + item.quantity,
+    );
+  }
+
+  Future<void> add(DealModel deal) async {
+    if (isCheckingOut.value) return;
+
     if (isDealExpired(deal)) {
       Get.snackbar(
         'Flash sale expired',
@@ -48,99 +95,265 @@ class CartService extends GetxService {
       return;
     }
 
-    final existing = items.firstWhereOrNull(
-          (i) => i.deal.id == deal.id,
-    );
+    if (!_reservingDealIds.add(deal.id)) return;
 
-    if (existing != null) {
-      if (existing.quantity >= deal.quantityLeft) {
-        LogService.log(
-          'cart: cannot add more of deal ${deal.id}',
+    try {
+      final existing = items.firstWhereOrNull(
+            (item) => item.deal.id == deal.id,
+      );
+
+      if (existing != null &&
+          existing.quantity >= deal.quantityLeft) {
+        Get.snackbar(
+          'Stock limit reached',
+          'Only ${deal.quantityLeft} items are available.',
+          snackPosition: SnackPosition.BOTTOM,
         );
         return;
       }
 
-      existing.quantity++;
-      items.refresh();
-    } else {
-      items.add(CartItemModel(deal: deal));
-    }
+      final previousQuantity = existing?.quantity ?? 0;
+      final oldReservation = existing?.reservation;
+      final newQuantity = previousQuantity + 1;
 
-    _recount();
+      final cartItem = existing ??
+          CartItemModel(
+            deal: deal,
+            quantity: 0,
+          );
+
+      if (existing == null) {
+        items.add(cartItem);
+      }
+
+      // Optimistic update.
+      cartItem.quantity = newQuantity;
+      items.refresh();
+      _recount();
+
+      try {
+        final reservation = await _repo.reserve(
+          deal.id,
+          quantity: newQuantity,
+        );
+
+        // Item was removed or expired during the request.
+        if (!items.contains(cartItem) ||
+            isDealExpired(deal) ||
+            isCheckingOut.value) {
+          if (items.contains(cartItem)) {
+            items.remove(cartItem);
+            _recount();
+          }
+
+          await _release(reservation.id);
+
+          if (oldReservation != null) {
+            await _release(oldReservation.id);
+          }
+          return;
+        }
+
+        cartItem.reservation = reservation;
+        items.refresh();
+
+        if (oldReservation != null) {
+          await _release(oldReservation.id);
+        }
+      } catch (e) {
+        LogService.error('reservation failed', e);
+
+        if (items.contains(cartItem)) {
+          if (previousQuantity == 0) {
+            items.remove(cartItem);
+          } else {
+            cartItem.quantity = previousQuantity;
+            cartItem.reservation = oldReservation;
+            items.refresh();
+          }
+          _recount();
+        }
+
+        Get.snackbar(
+          'Unable to reserve',
+          'The requested quantity is unavailable. Please try again.',
+          snackPosition: SnackPosition.BOTTOM,
+        );
+      }
+    } finally {
+      _reservingDealIds.remove(deal.id);
+      items.refresh();
+    }
   }
 
-  void _removeExpiredDeals() {
-    if (items.isEmpty) return;
+  Future<void> decrement(int dealId) async {
+    if (isCheckingOut.value ||
+        !_reservingDealIds.add(dealId)) {
+      return;
+    }
+
+    try {
+      final item = items.firstWhereOrNull(
+            (i) => i.deal.id == dealId,
+      );
+      if (item == null) return;
+
+      if (item.quantity <= 1) {
+        await _removeItem(item);
+        return;
+      }
+
+      final previousQuantity = item.quantity;
+      final oldReservation = item.reservation;
+      final newQuantity = previousQuantity - 1;
+
+      // Optimistically decrease quantity.
+      item.quantity = newQuantity;
+      items.refresh();
+      _recount();
+
+      try {
+        final reservation = await _repo.reserve(
+          dealId,
+          quantity: newQuantity,
+        );
+
+        if (!items.contains(item) ||
+            isDealExpired(item.deal)) {
+          items.remove(item);
+          _recount();
+          await _release(reservation.id);
+
+          if (oldReservation != null) {
+            await _release(oldReservation.id);
+          }
+          return;
+        }
+
+        item.reservation = reservation;
+        items.refresh();
+
+        if (oldReservation != null) {
+          await _release(oldReservation.id);
+        }
+      } catch (e) {
+        LogService.error('decrement reservation failed', e);
+
+        if (items.contains(item)) {
+          item.quantity = previousQuantity;
+          item.reservation = oldReservation;
+          items.refresh();
+          _recount();
+        }
+
+        Get.snackbar(
+          'Unable to update bag',
+          'Could not update the reservation. Please try again.',
+          snackPosition: SnackPosition.BOTTOM,
+        );
+      }
+    } finally {
+      _reservingDealIds.remove(dealId);
+      items.refresh();
+    }
+  }
+
+  Future<void> _removeItem(CartItemModel item) async {
+    items.remove(item);
+    _recount();
+
+    final reservation = item.reservation;
+
+    if (reservation != null) {
+      await _release(reservation.id);
+    }
+  }
+
+  Future<void> remove(int dealId) async {
+    if (isCheckingOut.value) return;
+
+    final item = items.firstWhereOrNull(
+          (i) => i.deal.id == dealId,
+    );
+
+    if (item == null) return;
+
+    // Remove immediately. An in-flight reserve is cleaned
+    // up when its response arrives.
+    await _removeItem(item);
+  }
+
+  void removeExpiredItems() {
+    if (isCheckingOut.value || items.isEmpty) return;
 
     final now = DateTime.now();
 
-    final expiredItems = items.where((item) {
-      final endsAt = item.deal.flashSaleEndsAt;
+    final expired = items.where((item) {
+      final flashEnd = item.deal.flashSaleEndsAt;
+      final reservationEnd = item.reservation?.expiresAt;
 
-      return endsAt != null && !now.isBefore(endsAt);
+      final flashExpired = flashEnd != null &&
+          !now.isBefore(flashEnd);
+
+      final reservationExpired = reservationEnd != null &&
+          !now.isBefore(reservationEnd);
+
+      return flashExpired || reservationExpired;
     }).toList();
 
-    if (expiredItems.isEmpty) return;
+    if (expired.isEmpty) return;
 
-    final expiredIds = expiredItems
-        .map((item) => item.deal.id)
-        .toSet();
-
-    items.removeWhere(
-          (item) => expiredIds.contains(item.deal.id),
-    );
-
-    _recount();
-
-    final message = expiredItems.length == 1
-        ? '${expiredItems.first.deal.name} was removed from your bag.'
-        : '${expiredItems.length} expired deals were removed from your bag.';
+    for (final item in expired) {
+      // Release without blocking the shared clock.
+      unawaited(_removeItem(item));
+    }
 
     Get.snackbar(
-      'Flash sale expired',
-      message,
+      'Reservation expired',
+      expired.length == 1
+          ? '${expired.first.deal.name} was removed from your bag.'
+          : '${expired.length} expired deals were removed from your bag.',
       snackPosition: SnackPosition.BOTTOM,
       duration: const Duration(seconds: 3),
     );
   }
 
-  void decrement(int dealId) {
-    final existing = items.firstWhereOrNull(
-          (i) => i.deal.id == dealId,
-    );
+  Future<void> clear() async {
+    if (isCheckingOut.value) return;
 
-    if (existing == null) return;
+    final currentItems = items.toList();
+    items.clear();
+    _recount();
 
-    existing.quantity--;
-
-    if (existing.quantity <= 0) {
-      items.removeWhere((i) => i.deal.id == dealId);
-    } else {
-      items.refresh();
+    for (final item in currentItems) {
+      final id = item.reservation?.id;
+      if (id != null) {
+        await _release(id);
+      }
     }
-
-    _recount();
   }
 
-  void remove(int dealId) {
-    items.removeWhere((i) => i.deal.id == dealId);
-    _recount();
-  }
-
-  void clear() {
+  // Checkout consumes reservations, so do not release them.
+  void clearAfterCheckout() {
     items.clear();
     _recount();
   }
 
-  num get total =>
-      items.fold(0, (sum, i) => sum + i.lineTotal);
+  bool beginCheckout() {
+    removeExpiredItems();
 
-  void _recount() {
-    itemCount.value = items.fold(
-      0,
-          (sum, i) => sum + i.quantity,
-    );
+    if (!canCheckout) return false;
+
+    isCheckingOut.value = true;
+    return true;
   }
+
+  void finishCheckout() {
+    isCheckingOut.value = false;
+  }
+
+  num get total =>
+      items.fold(0, (sum, item) => sum + item.lineTotal);
 
   @override
   void onClose() {

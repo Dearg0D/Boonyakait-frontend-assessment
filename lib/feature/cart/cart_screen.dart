@@ -5,6 +5,7 @@ import '../../app_config.dart';
 import '../shared_widget/the_network_image.dart';
 import 'cart_controller.dart';
 import '../shared_widget/flash_sale_countdown.dart';
+import '../shared_widget/reservation_countdown.dart';
 
 class CartScreen extends GetView<CartController> {
   const CartScreen({super.key});
@@ -57,6 +58,23 @@ class CartScreen extends GetView<CartController> {
                                   fontSize: 13,
                                   color: AppConfig.primaryGreen,
                                   fontWeight: FontWeight.w600)),
+
+                          const SizedBox(height: 4),
+
+// F-3: Stock reservation countdown
+                          if (item.reservation != null)
+                            ReservationCountdown(
+                              expiresAt: item.reservation!.expiresAt,
+                            )
+                          else
+                            const Text(
+                              'Reserving...',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.orange,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
                           if (item.deal.flashSaleEndsAt != null) ...[
                             const SizedBox(height: 4),
                             Row(
@@ -77,20 +95,30 @@ class CartScreen extends GetView<CartController> {
                         ],
                       ),
                     ),
+
                     Row(
                       children: [
                         IconButton(
                           visualDensity: VisualDensity.compact,
                           icon: const Icon(Icons.remove_circle_outline),
-                          onPressed: () => cart.decrement(item.deal.id),
+                          onPressed: cart.isCheckingOut.value ||
+                              cart.isReserving(item.deal.id)
+                              ? null
+                              : () => cart.decrement(item.deal.id),
                         ),
-                        Text('${item.quantity}',
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold)),
+                        Text(
+                          '${item.quantity}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                         IconButton(
                           visualDensity: VisualDensity.compact,
                           icon: const Icon(Icons.add_circle_outline),
-                          onPressed: () => cart.add(item.deal),
+                          onPressed: cart.isCheckingOut.value ||
+                              cart.isReserving(item.deal.id)
+                              ? null
+                              : () => cart.add(item.deal),
                         ),
                       ],
                     ),
@@ -119,16 +147,21 @@ class CartScreen extends GetView<CartController> {
                 ],
               ),
               const SizedBox(width: 24),
+
               Expanded(
                 child: FilledButton(
-                  onPressed: controller.isCheckingOut.value
-                      ? null
-                      : controller.checkout,
+                  onPressed: cart.canCheckout &&
+                      !controller.isCheckingOut.value
+                      ? controller.checkout
+                      : null,
                   child: controller.isCheckingOut.value
                       ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2))
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                    ),
+                  )
                       : const Text('Checkout'),
                 ),
               ),
